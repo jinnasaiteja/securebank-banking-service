@@ -1,0 +1,60 @@
+services:
+
+  mysql:
+    image: mysql:8.4
+    container_name: securebank-mysql-compose
+
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+    ports:
+      - "3307:3306"
+
+    volumes:
+      - securebank_mysql_data:/var/lib/mysql
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+    restart: unless-stopped
+
+
+  banking-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: securebank-banking-service:1.0
+    container_name: securebank-banking-service
+
+    environment:
+      SERVER_PORT: 8081
+
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+    ports:
+      - "8081:8081"
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+
+volumes:
+  securebank_mysql_data:
