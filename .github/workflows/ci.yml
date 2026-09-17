@@ -1,49 +1,48 @@
 name: SecureBank CI
 
 on:
-   push:
-     branches:
-       - dev
-   pull_request:
-     branches:
-       - dev
+  push:
+    branches:
+      - dev
+
+  pull_request:
+    branches:
+      - dev
 
 permissions:
-   contents: read
+  contents: read
 
 jobs:
   build-test:
+
     name: Build, Test and Docker Build
+
     runs-on: ubuntu-latest
+
     services:
       mysql:
         image: mysql:8.4
+
         env:
           MYSQL_DATABASE: securebank
           MYSQL_USER: securebank
           MYSQL_PASSWORD: securebank_ci_password
           MYSQL_ROOT_PASSWORD: root_ci_password
+
         ports:
           - 3306:3306
+
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot_ci_password"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+          --health-start-period=20s
 
     steps:
 
-      # -------------------------------------------------------
-      # Checkout source code
-      # -------------------------------------------------------
-
       - name: Checkout source code
         uses: actions/checkout@v7
-
-
-      # -------------------------------------------------------
-      # Install Java 21
-      # -------------------------------------------------------
 
       - name: Set up Java 21
         uses: actions/setup-java@v6
@@ -52,39 +51,38 @@ jobs:
           java-version: '21'
           cache: maven
 
-
-      # -------------------------------------------------------
-      # Verify Java installation
-      # -------------------------------------------------------
-
       - name: Verify Java
         run: java -version
-
-
-      # -------------------------------------------------------
-      # Make Maven wrapper executable
-      # -------------------------------------------------------
 
       - name: Make Maven wrapper executable
         run: chmod +x mvnw
 
+      - name: Verify MySQL port
+        run: |
+          python3 - <<'PY'
+          import socket
+          import sys
 
-      # -------------------------------------------------------
-      # Compile and run tests
-      # -------------------------------------------------------
+          host = "127.0.0.1"
+          port = 3306
+
+          try:
+              with socket.create_connection((host, port), timeout=5):
+                  print(f"MySQL is reachable at {host}:{port}")
+          except Exception as e:
+              print(f"Cannot reach MySQL: {e}")
+              sys.exit(1)
+          PY
 
       - name: Build and test application
+        env:
+          DB_URL: jdbc:mysql://127.0.0.1:3306/securebank?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+          DB_USERNAME: securebank
+          DB_PASSWORD: securebank_ci_password
         run: ./mvnw --batch-mode clean verify
-
-
-      # -------------------------------------------------------
-      # Build Docker image
-      # -------------------------------------------------------
 
       - name: Build Docker image
         run: |
           docker build \
             -t securebank-banking-service:${{ github.sha }} \
             .
-
-
