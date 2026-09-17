@@ -1,5 +1,8 @@
 FROM eclipse-temurin:21-jdk AS builder
 
+LABEL org.opencontainers.image.source="https://github.com/jinnasaiteja/securebank-banking-service"
+LABEL org.opencontainers.image.description="SecureBank Spring Boot banking service"
+
 WORKDIR /app
 
 COPY . .
