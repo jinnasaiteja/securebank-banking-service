@@ -11,15 +11,21 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
+
   build-test:
 
     name: Build, Test and Docker Build
 
     runs-on: ubuntu-latest
 
+    # =========================================================
+    # MYSQL SERVICE
+    # =========================================================
     services:
+
       mysql:
         image: mysql:8.4
 
@@ -41,8 +47,17 @@ jobs:
 
     steps:
 
+      # =======================================================
+      # CHECKOUT SOURCE CODE
+      # =======================================================
+
       - name: Checkout source code
         uses: actions/checkout@v7
+
+
+      # =======================================================
+      # JAVA SETUP
+      # =======================================================
 
       - name: Set up Java 21
         uses: actions/setup-java@v6
@@ -51,11 +66,26 @@ jobs:
           java-version: '21'
           cache: maven
 
+
+      # =======================================================
+      # VERIFY JAVA
+      # =======================================================
+
       - name: Verify Java
         run: java -version
 
+
+      # =======================================================
+      # MAVEN WRAPPER PERMISSION
+      # =======================================================
+
       - name: Make Maven wrapper executable
         run: chmod +x mvnw
+
+
+      # =======================================================
+      # VERIFY MYSQL
+      # =======================================================
 
       - name: Verify MySQL port
         run: |
@@ -74,15 +104,61 @@ jobs:
               sys.exit(1)
           PY
 
+
+      # =======================================================
+      # MAVEN BUILD + TEST
+      # =======================================================
+
       - name: Build and test application
         env:
           DB_URL: jdbc:mysql://127.0.0.1:3306/securebank?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
           DB_USERNAME: securebank
           DB_PASSWORD: securebank_ci_password
+
         run: ./mvnw --batch-mode clean verify
 
-      - name: Build Docker image
-        run: |
-          docker build \
-            -t securebank-banking-service:${{ github.sha }} \
-            .
+
+      # =======================================================
+      # DOCKER BUILDX
+      # =======================================================
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+
+      # =======================================================
+      # LOGIN TO GITHUB CONTAINER REGISTRY
+      # Runs only when code is pushed.
+      # Pull requests will build but will not publish images.
+      # =======================================================
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v4
+
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+
+      # =======================================================
+      # BUILD + PUSH DOCKER IMAGE
+      # =======================================================
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+
+        with:
+          context: .
+
+          # Push image only for actual pushes to dev.
+          # Pull requests only test the Docker build.
+          push: ${{ github.event_name == 'push' }}
+
+          tags: |
+            ghcr.io/${{ github.repository }}:dev
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
